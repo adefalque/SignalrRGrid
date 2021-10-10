@@ -1,0 +1,132 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.noStyle.js"></script>
+<script src="lib/signalr/dist/browser/signalr.js"></script>
+
+<div class="container">
+</div>
+
+<nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+    <div class="container">
+        <div id="stateLabel">Ready to connect</div>
+        <div id="connectionIdLabel">ConnectionId: N/A</div>
+        <div>
+            <button onclick="addItems()">Add Items</button>
+            <button onclick="connectSignalR()">Connect</button>
+            <button onclick="closeSignalR()">Close</button>
+        </div>
+    </div>
+</nav>
+
+<div id="myGrid" class="ag-theme-balham-dark" style="height: 500px; width:1100px;"></div>
+
+
+<script type="text/javascript" charset="utf-8">
+    var stateLabel = document.getElementById("stateLabel");
+    var connectionIdLabel = document.getElementById("connectionIdLabel");
+
+    const hubConnectionUrl = "https://localhost:5001/investChangeTrackerHub";
+    var hubConnection = new signalR.HubConnectionBuilder().withUrl(hubConnectionUrl).build();
+
+    async function connectSignalR() {
+        stateLabel.innerText = "Attempting to connect...";
+
+        await hubConnection.start();
+
+        updateSignalRState();
+    }
+
+    async function closeSignalR() {
+        if (!hubConnection || hubConnection.state !== "Connected") {
+            alert("You're not connected");
+        }
+
+        await hubConnection.invoke("StopWatcher");
+
+        await hubConnection.stop();
+
+        updateSignalRState();
+    }
+
+    hubConnection.onclose(function (event) {
+        updateSignalRState();
+    });
+
+    hubConnection.on("ReceiveConnectionId", (connectionId) => {
+        connectionIdLabel.innerText = "ConnectionId: " + connectionId;
+    });
+
+    hubConnection.on("ReceiveChangeTrackerData", (data) => {
+        addItems();
+    });
+
+    function updateSignalRState() {
+        stateLabel.innerText = hubConnection.state;
+
+        if (hubConnection.state !== "Connected") {
+            connectionIdLabel.innerText = "ConnectionId: N/A";
+        }
+    }
+
+    function createNewRowData(mainTable, changes) {
+        const newData = {
+            when: new Date().toISOString(),
+            mainTable,
+            changes: JSON.stringify(changes)
+        };
+        return newData;
+    }
+
+    function addItems() {
+        const newItems = [createNewRowData("SFAACCOUNT", { columns: "xxx" })];
+        const res = gridOptions.api.applyTransaction({
+            add: newItems
+        });
+    }
+
+    const defaultColDef = {
+        resizable: true,
+    };
+
+    // specify the columns
+    const columnDefs = [
+        { field: "when", width: 60 },
+        { field: "mainTable", width: 40 },
+        { field: "changes" }
+    ];
+
+    // specify the data
+    const rowData = [
+        createNewRowData("VCFUND", { columns: "xxx" }),
+        createNewRowData("VCFUND", { columns: "yyy" }),
+        createNewRowData("SFACONTACT", { columns: "zzz" })
+    ];
+
+    // let the grid know which columns and what data to use
+    const gridOptions = {
+        defaultColDef: defaultColDef,
+        columnDefs: columnDefs,
+        rowData: rowData,
+        onGridReady: function () {
+            gridOptions.api.sizeColumnsToFit();
+        },
+        rowSelection: 'single',
+        enableRangeSelection: false
+    };
+
+    // wait for the document to be loaded, otherwise
+    // ag-Grid will not find the div in the document.
+    document.addEventListener("DOMContentLoaded", function () {
+        console.log('before create grid');
+        // lookup the container we want the Grid to use
+        var eGridDiv = document.querySelector('#myGrid');
+        console.log(eGridDiv);
+        // create the grid passing in the div to use together with the columns & data we want to use
+        new agGrid.Grid(eGridDiv, gridOptions);
+    });
+
+</script>
